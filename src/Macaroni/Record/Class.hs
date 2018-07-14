@@ -26,8 +26,8 @@ class
   , PersistEntity allRecords
   -- , PersistEntityBackend allRecords ~ backend
   -- , PersistCore backend
-  ) => MacaroniRecordSet allRecords where
-
+  ) => MacaroniRecordSet allRecords userId | allRecords -> userId where
+  -- store
 
 class DecodeRecord allRecords record | record -> allRecords where
   decodeRecord :: allRecords -> Either Text record
@@ -42,17 +42,29 @@ class EncodeRecord allRecords record | record -> allRecords where
 instance EncodeRecord a a where
   encodeRecord = id
 
+{-
+NOTE: Storing drafts seems tricky with these semantics:
+- getRecord - retreiving a data view from _integrated_ content, per symbol
+- setRecord - stores _as a revision draft_?
+- newRecord - stores _as a conception draft_? <- revisions to newRecords by others?
+  -- competing implementations: au natural
+-}
+
 
 
 class
-  ( BasicCRUDStorable key (BasicSetError symbol) (BasicDeleteError symbol)
-      getRecord setRecord newRecord symbol (ReaderT SqlBackend IO)
-  , GetStorable key (BasicSynopsis symbol) symbol (ReaderT SqlBackend IO)
+  ( BasicCRUDStorable (BasicKey symbol) (BasicSetError symbol) (BasicDeleteError symbol)
+      (BasicGetRecord symbol)
+      (BasicSetRecord symbol)
+      (BasicNewRecord symbol)
+      symbol (ReaderT SqlBackend IO)
+  , GetStorable (BasicKey symbol) (BasicSynopsis symbol) symbol (ReaderT SqlBackend IO)
   , GetAllStorable () (BasicSynopsis symbol) symbol (ReaderT SqlBackend IO)
-  ) => MacaroniBasicRecord key getRecord setRecord newRecord symbol
-       | getRecord -> key symbol
-       , setRecord -> key symbol
-       , newRecord -> key symbol where
+  ) => MacaroniBasicRecord symbol where
+  type BasicKey symbol :: *
+  type BasicGetRecord symbol :: *
+  type BasicSetRecord symbol :: *
+  type BasicNewRecord symbol :: *
   type BasicSynopsis symbol :: *
   type BasicSetError symbol :: *
   type BasicDeleteError symbol :: *
@@ -61,17 +73,19 @@ class
 
 class
   ( CRUDStorable
-    (parentKey, key) getRecord
-    key newRecord
-    (parentKey, key) (ParentedSetError symbol) setRecord
-    (parentKey, key) (ParentedDeleteError symbol)
+    (ParentedParentKey symbol, ParentedKey symbol) (ParentedGetRecord symbol)
+    (ParentedKey symbol) (ParentedNewRecord symbol)
+    (ParentedParentKey symbol, ParentedKey symbol) (ParentedSetError symbol) (ParentedSetRecord symbol)
+    (ParentedParentKey symbol, ParentedKey symbol) (ParentedDeleteError symbol)
     symbol (ReaderT SqlBackend IO)
-  , GetStorable (parentKey, key) (ParentedSynopsis symbol) symbol (ReaderT SqlBackend IO)
-  , GetAllStorable parentKey (ParentedSynopsis symbol) symbol (ReaderT SqlBackend IO)
-  ) => MacaroniParentedRecord parentKey key getRecord setRecord newRecord symbol
-       | getRecord -> key symbol
-       , setRecord -> key symbol
-       , newRecord -> key symbol where
+  , GetStorable (ParentedParentKey symbol, ParentedKey symbol) (ParentedSynopsis symbol) symbol (ReaderT SqlBackend IO)
+  , GetAllStorable (ParentedParentKey symbol) (ParentedSynopsis symbol) symbol (ReaderT SqlBackend IO)
+  ) => MacaroniParentedRecord symbol where
+  type ParentedParentKey symbol :: *
+  type ParentedKey symbol :: *
+  type ParentedGetRecord symbol :: *
+  type ParentedSetRecord symbol :: *
+  type ParentedNewRecord symbol :: *
   type ParentedSynopsis symbol :: *
   type ParentedSetError symbol :: *
   type ParentedDeleteError symbol :: *
